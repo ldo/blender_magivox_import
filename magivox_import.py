@@ -230,11 +230,11 @@ class VoxModel :
                     ) :
                         raise Failure \
                           (
-                                "voxel[%d] = (%d, %d, %d) out of range of dimensions (%d, %d, %d, 254)"
+                                "voxel[%d] = (%d, %d, %d, %d) out of range of dimensions (%d, %d, %d, 254)"
                             %
                                 (
                                     i,
-                                    voxel.x, voxel.y, voxel.z,
+                                    voxel.x, voxel.y, voxel.z, voxel.c,
                                     last_size[0], last_size[1], last_size[2],
                                 )
                           )
