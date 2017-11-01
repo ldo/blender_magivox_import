@@ -383,7 +383,151 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
             f.close()
             model = VoxModel(main)
             sys.stderr.write("got model %s\n" % repr(model)) # debug
-            # more TBD
+            materials = {}
+            for objindex, (obj_dims, obj) in enumerate(model.models) :
+                obj_materials = []
+                verts = []
+                vertindexes = {}
+                voxels = {(v.x, v.y, v.z) : v.c for v in obj}
+                faces = []
+                corner_lo = \
+                    (
+                        min(v[0] for v in voxels),
+                        min(v[1] for v in voxels),
+                        min(v[2] for v in voxels),
+                    )
+                corner_hi = \
+                    (
+                        max(v[0] for v in voxels) + 1,
+                        max(v[1] for v in voxels) + 1,
+                        max(v[2] for v in voxels) + 1,
+                    )
+                # output faces in some predictable order
+                for x in range(corner_lo[0], corner_hi[0]) :
+                    for y in range(corner_lo[1], corner_hi[1]) :
+                        for z in range(corner_lo[2], corner_hi[2]) :
+                            if (x, y, z) in voxels :
+                                vox_faces = []
+                                # add faces only on outer sides
+                                if (x - 1, y, z) not in voxels :
+                                    vox_faces.append \
+                                      (
+                                        (
+                                            (x, y, z),
+                                            (x, y, z + 1),
+                                            (x, y + 1, z + 1),
+                                            (z, y + 1, z),
+                                        )
+                                      )
+                                #end if
+                                if (x + 1, y, z) not in voxels :
+                                    vox_faces.append \
+                                      (
+                                        (
+                                            (x, y, z),
+                                            (x, y + 1, z),
+                                            (x, y + 1, z + 1),
+                                            (x, y, z + 1),
+                                        )
+                                      )
+                                #end if
+                                if (x, y - 1, z) not in voxels :
+                                    vox_faces.append \
+                                      (
+                                        (
+                                            (x, y, z),
+                                            (x + 1, y, z),
+                                            (x + 1, y, z + 1),
+                                            (x, y, z + 1),
+                                        )
+                                      )
+                                #end if
+                                if (x, y + 1, z) not in voxels :
+                                    vox_faces.append \
+                                      (
+                                        (
+                                            (x, y, z),
+                                            (x, y, z + 1),
+                                            (x + 1, y, z + 1),
+                                            (x + 1, y, z),
+                                        )
+                                      )
+                                #end if
+                                if (x, y, z - 1) not in voxels :
+                                    vox_faces.append \
+                                      (
+                                        (
+                                            (x, y, z),
+                                            (x, y + 1, z),
+                                            (x + 1, y + 1, z),
+                                            (x + 1, y + 1, z),
+                                        )
+                                      )
+                                #end if
+                                if (x, y, z + 1) not in voxels :
+                                    vox_faces.append \
+                                      (
+                                        (
+                                            (x, y, z),
+                                            (x + 1, y, z),
+                                            (x + 1, y + 1, z),
+                                            (x, y + 1, z),
+                                        )
+                                      )
+                                #end if
+                                if len(vox_faces) != 0 :
+                                    matindex = voxels[x, y, z]
+                                    # only define materials for referenced colours
+                                    # TODO: model.materials
+                                    if matindex not in materials :
+                                        mat_colour = model.palette[matindex + 1]
+                                        mat_name = "vox_%d_%02x%02x%02x%02x" % (matindex, mat_colour.r, mat_colour.g, mat_colour.b, mat_colour.a)
+                                        material = bpy.data.materials.new(mat_name)
+                                        material.diffuse_color = (mat_colour.r, mat_colour.g, mat_colour.b)
+                                        if mat_colour.a < 255 :
+                                            material.use_transparency = True
+                                            material.transparency_method = "Z_TRANSPARENCY"
+                                            material.alpha = mat_colour.a / 255
+                                        #end if
+                                        materials[matindex] = mat_name
+                                    #end if
+                                    if matindex not in obj_materials :
+                                        obj_materials.append(materials[matindex])
+                                    #end if
+                                #end if
+                                for vox_face in vox_faces :
+                                    face = []
+                                    for vox_vert in vox_face :
+                                        if vox_vert not in vertindexes :
+                                            vertindexes[vox_vert] = len(verts)
+                                            verts.append(vox_vert)
+                                        #end if
+                                        vox_vert = vertindexes[vox_vert]
+                                        face.append(vox_vert)
+                                    #end for
+                                    faces.append((face, matindex))
+                                #end for
+                            #end if (x, y, z) in voxels
+                        #end for z
+                    #end for y
+                #end for x
+                vox_name = "vox_%03d" % (objindex + 1)
+                vox_mesh = bpy.data.meshes.new(vox_name)
+                vox_mesh.from_pydata(verts, [], [f[0] for f in faces])
+                vox_mesh.update()
+                vox_obj = bpy.data.objects.new(vox_name, vox_mesh)
+                context.scene.objects.link(vox_obj)
+                bpy.ops.object.select_all(action = "DESELECT")
+                vox_obj.select = True
+                for material in obj_materials :
+                    bpy.ops.object.material_slot_add()
+                    vox_obj.material_slots[-1].material = material
+                #end for
+                for faceindex, matindex in faces :
+                    vox_mesh.polygons[faceindex].material_index = matindex
+                #end for
+                vox_mesh.update()
+            #end for obj
             # all done
             status = {"FINISHED"}
         except Failure as why :
