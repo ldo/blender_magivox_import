@@ -419,7 +419,7 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
                                             (x, y, z),
                                             (x, y, z + 1),
                                             (x, y + 1, z + 1),
-                                            (z, y + 1, z),
+                                            (x, y + 1, z),
                                         )
                                       )
                                 #end if
