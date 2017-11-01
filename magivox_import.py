@@ -460,7 +460,7 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
                                             (x, y, z),
                                             (x, y + 1, z),
                                             (x + 1, y + 1, z),
-                                            (x + 1, y + 1, z),
+                                            (x + 1, y, z),
                                         )
                                       )
                                 #end if
@@ -483,7 +483,7 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
                                         mat_colour = model.palette[matindex + 1]
                                         mat_name = "vox_%d_%02x%02x%02x%02x" % (matindex, mat_colour.r, mat_colour.g, mat_colour.b, mat_colour.a)
                                         material = bpy.data.materials.new(mat_name)
-                                        material.diffuse_color = (mat_colour.r, mat_colour.g, mat_colour.b)
+                                        material.diffuse_color = (mat_colour.r / 255, mat_colour.g / 255, mat_colour.b / 255)
                                         if mat_colour.a < 255 :
                                             material.use_transparency = True
                                             material.transparency_method = "Z_TRANSPARENCY"
@@ -492,7 +492,7 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
                                         materials[matindex] = mat_name
                                     #end if
                                     if matindex not in obj_materials :
-                                        obj_materials.append(materials[matindex])
+                                        obj_materials.append(matindex)
                                     #end if
                                 #end if
                                 for vox_face in vox_faces :
@@ -519,12 +519,13 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
                 context.scene.objects.link(vox_obj)
                 bpy.ops.object.select_all(action = "DESELECT")
                 vox_obj.select = True
-                for material in obj_materials :
-                    bpy.ops.object.material_slot_add()
-                    vox_obj.material_slots[-1].material = material
+                vox_materials = []
+                for matindex in obj_materials :
+                    vox_materials.append(matindex)
+                    vox_mesh.materials.append(bpy.data.materials[materials[matindex]])
                 #end for
-                for faceindex, matindex in faces :
-                    vox_mesh.polygons[faceindex].material_index = matindex
+                for faceindex, (_, matindex) in enumerate(faces) :
+                    vox_mesh.polygons[faceindex].material_index = vox_materials.index(matindex)
                 #end for
                 vox_mesh.update()
             #end for obj
