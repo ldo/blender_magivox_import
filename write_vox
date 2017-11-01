@@ -1,0 +1,119 @@
+#!/usr/bin/python3
+#+
+# Quick-and-dirty test script for creating a .vox file from JSON format.
+# Reads JSON from stdin, writes .vox data to stdout.
+#
+# Example input:
+#
+# {"id" : "MAIN",
+#     "content" : "",
+#     "children" :
+#         [
+#             {"id" : "SIZE",
+#                 "content" : [1, 1, 1],
+#                 "children" : []
+#             },
+#             {"id" : "XYZI",
+#                 "content" :
+#                     [
+#                         [0, 0, 0, 1]
+#                     ],
+#                 "children" : []
+#             }
+#         ]
+# }
+#-
+
+import sys
+import io
+import struct
+import json
+import getopt
+
+class Failure(Exception) :
+
+    def __init__(self, msg) :
+        self.msg = msg
+    #end __init__
+
+#end Failure
+
+def pack_ints(data, struct_type) :
+    if isinstance(data, int) :
+        data = struct.pack(struct_type, data)
+    elif isinstance(data, str) :
+        data = data.encode()
+    elif isinstance(data, (list, tuple)) :
+        data = b"".join(pack_ints(d, struct_type) for d in data)
+    elif not isinstance(data, bytes) :
+        raise TypeError("invalid type of chunk data %s" % repr(data))
+    #end if
+    return \
+        data
+#end pack_ints
+
+class Chunk :
+
+    __slots__ = ("id", "content", "children")
+
+    @classmethod
+    def from_json(celf, data, expect_id = None) :
+        if not isinstance(data, dict) or "id" not in data :
+            raise Failure("expecting json dict with id field")
+        #end if
+        id = data["id"]
+        if expect_id != None and id != expect_id :
+            raise Failure("expecting id = %s, not %s" % (repr(expect_id), repr(id)))
+        #end if
+        pack_type = {"SIZE" : "I"}.get(id, "B") # good enough for now
+        content = pack_ints(data.get("content", ""), pack_type)
+        if id == "XYZI" :
+            if len(content) % 4 != 0 :
+                raise Failure("XYZI chunk is not whole number of voxels")
+            #end if
+            content = struct.pack("<I", len(content) // 4) + content
+        #end if
+        children = data.get("children", [])
+        if not isinstance(children, (list, tuple)) :
+            raise Failure("expecting sequence of children")
+        #end if
+        return \
+            celf(id.encode(), content, [celf.from_json(c) for c in children])
+    #end from_json
+
+    def __init__(self, id, content, children) :
+        if not isinstance(id, bytes) or len(id) != 4 :
+            raise ValueError("chunk id %s not 4 bytes" % repr(id))
+        #end if
+        self.id = id
+        self.content = content
+        self.children = children
+    #end __init__
+
+    def to_bytes(self) :
+        out = io.BytesIO()
+        out.write(self.id)
+        children = b"".join(child.to_bytes() for child in self.children)
+        out.write(struct.pack("<II", len(self.content), len(children)))
+        out.write(self.content)
+        out.write(children)
+        return \
+            out.getvalue()
+    #end to_bytes
+
+    def __repr__(self) :
+        return \
+            "%s(id = %s, content = %s, children = %s)" % (repr(type(self).__name__), self.id, repr(self.content), repr(self.children))
+    #end __repr__
+
+#end Chunk
+
+jmain = json.load(sys.stdin.buffer)
+sys.stdout.write("loaded %s\n" % repr(jmain))
+main = Chunk.from_json(jmain, expect_id = "MAIN")
+sys.stderr.write("decoded %s\n" % repr(main))
+out = sys.stdout.buffer
+out.write(b"VOX ")
+out.write(struct.pack("<I", 150))
+out.write(main.to_bytes())
+out.flush()
