@@ -168,7 +168,7 @@ class VoxModel :
 
     #end Material
 
-    # default_palette set up later
+    # default_palette set up below
 
     def __init__(self, main) :
         celf = type(self)
@@ -296,6 +296,9 @@ class VoxModel :
         #end if
         if len(self.models) != nr_models :
             raise Failure("expected %d models in file, got %d" % (nr_models, len(self.models)))
+        #end if
+        if self.palette == None :
+            self.palette = type(self).default_palette
         #end if
     #end __init__
 
