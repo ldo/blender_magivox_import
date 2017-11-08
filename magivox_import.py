@@ -20,7 +20,7 @@ bl_info = \
     {
         "name" : "Magivox Import",
         "author" : "Lawrence D'Oliveiro <ldo@geek-central.gen.nz>",
-        "version" : (0, 1, 0),
+        "version" : (0, 1, 1),
         "blender" : (2, 7, 9),
         "location" : "File > Import > MagicaVoxel",
         "description" :
@@ -226,11 +226,11 @@ class VoxModel :
                         or
                             voxel.z >= last_size[2]
                         or
-                            voxel.c > 254
+                            voxel.c == 0
                     ) :
                         raise Failure \
                           (
-                                "voxel[%d] = (%d, %d, %d, %d) out of range of dimensions (%d, %d, %d, 254)"
+                                "voxel[%d] = (%d, %d, %d, %d) out of range of dimensions (%d, %d, %d, 1 .. 255)"
                             %
                                 (
                                     i,
@@ -257,7 +257,7 @@ class VoxModel :
                     self.Colour(r = rgba[i * 4], g = rgba[i * 4 + 1], b = rgba[i * 4 + 2], a = rgba[i * 4 + 3])
                     for i in range(256)
                   )
-                # note: seems like entry 0 is ignored
+                # is entry 0 ignored?
             elif chunk.id == b"MATT" :
                 chunk.assert_no_children()
                 if len(chunk.content) < 16 :
@@ -483,7 +483,7 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
                                     # only define materials for referenced colours
                                     # TODO: model.materials
                                     if matindex not in materials :
-                                        mat_colour = model.palette[matindex + 1]
+                                        mat_colour = model.palette[matindex - 1]
                                         mat_name = "vox_%d_%02x%02x%02x%02x" % (matindex, mat_colour.r, mat_colour.g, mat_colour.b, mat_colour.a)
                                         material = bpy.data.materials.new(mat_name)
                                         material.diffuse_color = (mat_colour.r / 255, mat_colour.g / 255, mat_colour.b / 255)
