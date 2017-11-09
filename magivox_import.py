@@ -20,7 +20,7 @@ bl_info = \
     {
         "name" : "Magivox Import",
         "author" : "Lawrence D'Oliveiro <ldo@geek-central.gen.nz>",
-        "version" : (0, 1, 1),
+        "version" : (0, 1, 2),
         "blender" : (2, 7, 9),
         "location" : "File > Import > MagicaVoxel",
         "description" :
@@ -412,72 +412,52 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
                             if (x, y, z) in voxels :
                                 vox_faces = []
                                 # add faces only on outer sides
-                                if (x - 1, y, z) not in voxels :
-                                    vox_faces.append \
-                                      (
-                                        (
-                                            (x, y, z),
-                                            (x, y, z + 1),
-                                            (x, y + 1, z + 1),
-                                            (x, y + 1, z),
-                                        )
-                                      )
-                                #end if
-                                if (x + 1, y, z) not in voxels :
-                                    vox_faces.append \
-                                      (
-                                        (
-                                            (x + 1, y, z),
-                                            (x + 1, y + 1, z),
-                                            (x + 1, y + 1, z + 1),
-                                            (x + 1, y, z + 1),
-                                        )
-                                      )
-                                #end if
-                                if (x, y - 1, z) not in voxels :
-                                    vox_faces.append \
-                                      (
-                                        (
-                                            (x, y, z),
-                                            (x + 1, y, z),
-                                            (x + 1, y, z + 1),
-                                            (x, y, z + 1),
-                                        )
-                                      )
-                                #end if
-                                if (x, y + 1, z) not in voxels :
-                                    vox_faces.append \
-                                      (
-                                        (
-                                            (x, y + 1, z),
-                                            (x, y + 1, z + 1),
-                                            (x + 1, y + 1, z + 1),
-                                            (x + 1, y + 1, z),
-                                        )
-                                      )
-                                #end if
-                                if (x, y, z - 1) not in voxels :
-                                    vox_faces.append \
-                                      (
-                                        (
-                                            (x, y, z),
-                                            (x, y + 1, z),
-                                            (x + 1, y + 1, z),
-                                            (x + 1, y, z),
-                                        )
-                                      )
-                                #end if
-                                if (x, y, z + 1) not in voxels :
-                                    vox_faces.append \
-                                      (
-                                        (
-                                            (x, y, z + 1),
-                                            (x + 1, y, z + 1),
-                                            (x + 1, y + 1, z + 1),
-                                            (x, y + 1, z + 1),
-                                        )
-                                      )
-                                #end if
+                                for axis in range(3) : # x, y, z
+                                    for positive in (False, True) : # direction along axis
+                                        neighbour_step = (-1, +1)[positive]
+                                        # neighbouring voxel in specified direction
+                                        # along specified axis
+                                        if (
+                                                (
+                                                    x + neighbour_step * int(axis == 0),
+                                                    y + neighbour_step * int(axis == 1),
+                                                    z + neighbour_step * int(axis == 2)
+                                                )
+                                            not in
+                                                voxels
+                                            # TODO: also include if either voxel material
+                                            # is non-opaque and they have different materials
+                                        ) :
+                                            # compute verts of voxel face in that
+                                            # direction along that axis
+                                            coords = [[x, y, z] for i in range(4)]
+                                            other_axes = \
+                                                ( # axes in plane of face, ordered in specified direction
+                                                    (axis + 2 - int(positive)) % 3,
+                                                    (axis + 1 + int(positive)) % 3
+                                                )
+                                            for i, step in enumerate((0, 1, 3, 2)) :
+                                                # generate vertex points in correct order
+                                                # to orient normal
+                                                if step & 1 != 0 :
+                                                    coords[i][other_axes[0]] += 1
+                                                #end if
+                                                if step & 2 != 0 :
+                                                    coords[i][other_axes[1]] += 1
+                                                #end if
+                                            #end for
+                                            if positive :
+                                                # voxel coord is used for face
+                                                # in negative direction along that
+                                                # axis, add 1 for face in positive
+                                                # direction
+                                                for i in range(4) :
+                                                    coords[i][axis] += 1
+                                                #end for
+                                            #end if
+                                            vox_faces.append(tuple(tuple(c) for c in coords))
+                                    #end for positive
+                                #end for axis
                                 if len(vox_faces) != 0 :
                                     matindex = voxels[x, y, z]
                                     # only define materials for referenced colours
