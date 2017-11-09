@@ -20,7 +20,7 @@ bl_info = \
     {
         "name" : "Magivox Import",
         "author" : "Lawrence D'Oliveiro <ldo@geek-central.gen.nz>",
-        "version" : (0, 1, 2),
+        "version" : (0, 2, 0),
         "blender" : (2, 7, 9),
         "location" : "File > Import > MagicaVoxel",
         "description" :
@@ -409,24 +409,37 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
                 for x in range(corner_lo[0], corner_hi[0]) :
                     for y in range(corner_lo[1], corner_hi[1]) :
                         for z in range(corner_lo[2], corner_hi[2]) :
-                            if (x, y, z) in voxels :
+                            my_colour = voxels.get((x, y, z))
+                            if my_colour != None : # voxel exists
+                                my_colour = model.palette[my_colour - 1]
                                 vox_faces = []
                                 # add faces only on outer sides
                                 for axis in range(3) : # x, y, z
                                     for positive in (False, True) : # direction along axis
                                         neighbour_step = (-1, +1)[positive]
-                                        # neighbouring voxel in specified direction
-                                        # along specified axis
+                                        neighbour = \
+                                            (
+                                                x + neighbour_step * int(axis == 0),
+                                                y + neighbour_step * int(axis == 1),
+                                                z + neighbour_step * int(axis == 2)
+                                            )
+                                            # neighbouring voxel in specified direction
+                                            # along specified axis
+                                        neighbour_colour = voxels.get(neighbour)
+                                        if neighbour_colour != None :
+                                            neighbour_colour = model.palette[neighbour_colour - 1]
+                                        #end if
                                         if (
-                                                (
-                                                    x + neighbour_step * int(axis == 0),
-                                                    y + neighbour_step * int(axis == 1),
-                                                    z + neighbour_step * int(axis == 2)
-                                                )
-                                            not in
-                                                voxels
-                                            # TODO: also include if either voxel material
-                                            # is non-opaque and they have different materials
+                                                neighbour_colour == None
+                                                  # outer face
+                                            or
+                                                    neighbour_colour != my_colour
+                                                and
+                                                    ( # face abutting non-opaque voxel
+                                                        my_colour.a < 255
+                                                    or
+                                                        neighbour_colour.a < 255
+                                                    )
                                         ) :
                                             # compute verts of voxel face in that
                                             # direction along that axis
