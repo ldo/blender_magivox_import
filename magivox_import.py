@@ -20,7 +20,7 @@ bl_info = \
     {
         "name" : "Magivox Import",
         "author" : "Lawrence D'Oliveiro <ldo@geek-central.gen.nz>",
-        "version" : (0, 2, 0),
+        "version" : (0, 3, 0),
         "blender" : (2, 7, 9),
         "location" : "File > Import > MagicaVoxel",
         "description" :
@@ -362,6 +362,13 @@ VoxModel.default_palette = tuple \
 # Mainline
 #-
 
+include_nonopaque = False
+  # whether to include faces for inner voxels if they should be
+  # visible through nonopaque materials -- doesn’t work right,
+  # because it ends up doubling shared faces.
+include_all_voxels = True
+anti_zfighting_factor = 3
+
 class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
     bl_idname = "import_mesh.magivox"
     bl_label = "Magivox Import"
@@ -387,6 +394,9 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
             model = VoxModel(main)
             sys.stderr.write("got model %s\n" % repr(model)) # debug
             materials = {}
+            if include_all_voxels :
+                voxel_shrink = 1 - 10 ** - anti_zfighting_factor
+            #end if
             for objindex, (obj_dims, obj) in enumerate(model.models) :
                 obj_materials = []
                 verts = []
@@ -410,6 +420,9 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
                     for y in range(corner_lo[1], corner_hi[1]) :
                         for z in range(corner_lo[2], corner_hi[2]) :
                             my_colour = voxels.get((x, y, z))
+                            if include_all_voxels :
+                                voxel_midpt = (x + 0.5, y + 0.5, z + 0.5)
+                            #end if
                             if my_colour != None : # voxel exists
                                 my_colour = model.palette[my_colour - 1]
                                 vox_faces = []
@@ -430,9 +443,13 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
                                             neighbour_colour = model.palette[neighbour_colour - 1]
                                         #end if
                                         if (
+                                                include_all_voxels
+                                            or
                                                 neighbour_colour == None
                                                   # outer face
                                             or
+                                                    include_nonopaque
+                                                and
                                                     neighbour_colour != my_colour
                                                 and
                                                     ( # face abutting non-opaque voxel
@@ -466,6 +483,21 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
                                                 # direction
                                                 for i in range(4) :
                                                     coords[i][axis] += 1
+                                                #end for
+                                            #end if
+                                            if include_all_voxels :
+                                                for i in range(4) :
+                                                    coord = coords[i]
+                                                    for j in range(3) :
+                                                        coord[j] = \
+                                                          (
+                                                                    (coord[j] - voxel_midpt[j])
+                                                                *
+                                                                    voxel_shrink
+                                                            +
+                                                                voxel_midpt[j]
+                                                          )
+                                                    #end for
                                                 #end for
                                             #end if
                                             vox_faces.append(tuple(tuple(c) for c in coords))
