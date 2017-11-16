@@ -270,7 +270,7 @@ class VoxModel :
                     raise Failure("MATT chunk rest too short")
                 #end if
                 propvalues = struct.unpack("<" + "f" * len(value_props), chunk.content[16:])
-                props = dict(zip(value_props. propvalues))
+                props = dict(zip(value_props, propvalues))
                 for i in props_present :
                     if not i.has_value :
                         props[i] = None
