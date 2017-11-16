@@ -20,7 +20,7 @@ bl_info = \
     {
         "name" : "Magivox Import",
         "author" : "Lawrence D'Oliveiro <ldo@geek-central.gen.nz>",
-        "version" : (0, 3, 0),
+        "version" : (0, 4, 0),
         "blender" : (2, 7, 9),
         "location" : "File > Import > MagicaVoxel",
         "description" :
@@ -362,13 +362,6 @@ VoxModel.default_palette = tuple \
 # Mainline
 #-
 
-include_nonopaque = False
-  # whether to include faces for inner voxels if they should be
-  # visible through nonopaque materials -- doesn’t work right,
-  # because it ends up doubling shared faces.
-include_all_voxels = True
-anti_zfighting_factor = 3
-
 class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
     bl_idname = "import_mesh.magivox"
     bl_label = "Magivox Import"
@@ -394,151 +387,175 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
             model = VoxModel(main)
             sys.stderr.write("got model %s\n" % repr(model)) # debug
             materials = {}
-            if include_all_voxels :
-                voxel_shrink = 1 - 10 ** - anti_zfighting_factor
-            #end if
             for objindex, (obj_dims, obj) in enumerate(model.models) :
                 obj_materials = []
                 verts = []
-                vertindexes = {}
-                voxels = {(v.x, v.y, v.z) : v.c for v in obj}
+                voxel_colours = {(v.x, v.y, v.z) : v.c for v in obj}
+                voxel_shells = {} # key is (x, y, z), value is shell index
+                vertindexes = {} # key is (x, y, z, shell), value is index in verts
+                nr_shells = 0
                 faces = []
                 corner_lo = \
                     (
-                        min(v[0] for v in voxels),
-                        min(v[1] for v in voxels),
-                        min(v[2] for v in voxels),
+                        min(v[0] for v in voxel_colours),
+                        min(v[1] for v in voxel_colours),
+                        min(v[2] for v in voxel_colours),
                     )
                 corner_hi = \
                     (
-                        max(v[0] for v in voxels) + 1,
-                        max(v[1] for v in voxels) + 1,
-                        max(v[2] for v in voxels) + 1,
+                        max(v[0] for v in voxel_colours) + 1,
+                        max(v[1] for v in voxel_colours) + 1,
+                        max(v[2] for v in voxel_colours) + 1,
                     )
-                # output faces in some predictable order
-                for x in range(corner_lo[0], corner_hi[0]) :
-                    for y in range(corner_lo[1], corner_hi[1]) :
-                        for z in range(corner_lo[2], corner_hi[2]) :
-                            my_colour = voxels.get((x, y, z))
-                            if include_all_voxels :
-                                voxel_midpt = (x + 0.5, y + 0.5, z + 0.5)
-                            #end if
-                            if my_colour != None : # voxel exists
-                                my_colour = model.palette[my_colour - 1]
-                                vox_faces = []
-                                # add faces only on outer sides
-                                for axis in range(3) : # x, y, z
-                                    for positive in (False, True) : # direction along axis
-                                        neighbour_step = (-1, +1)[positive]
-                                        neighbour = \
-                                            (
-                                                x + neighbour_step * int(axis == 0),
-                                                y + neighbour_step * int(axis == 1),
-                                                z + neighbour_step * int(axis == 2)
-                                            )
-                                            # neighbouring voxel in specified direction
-                                            # along specified axis
-                                        neighbour_colour = voxels.get(neighbour)
-                                        if neighbour_colour != None :
-                                            neighbour_colour = model.palette[neighbour_colour - 1]
-                                        #end if
-                                        if (
-                                                include_all_voxels
-                                            or
-                                                neighbour_colour == None
-                                                  # outer face
-                                            or
-                                                    include_nonopaque
-                                                and
-                                                    neighbour_colour != my_colour
-                                                and
-                                                    ( # face abutting non-opaque voxel
-                                                        my_colour.a < 255
-                                                    or
-                                                        neighbour_colour.a < 255
-                                                    )
-                                        ) :
-                                            # compute verts of voxel face in that
-                                            # direction along that axis
-                                            coords = [[x, y, z] for i in range(4)]
-                                            other_axes = \
-                                                ( # axes in plane of face, ordered in specified direction
-                                                    (axis + 2 - int(positive)) % 3,
-                                                    (axis + 1 + int(positive)) % 3
-                                                )
-                                            for i, step in enumerate((0, 1, 3, 2)) :
-                                                # generate vertex points in correct order
-                                                # to orient normal
-                                                if step & 1 != 0 :
-                                                    coords[i][other_axes[0]] += 1
-                                                #end if
-                                                if step & 2 != 0 :
-                                                    coords[i][other_axes[1]] += 1
-                                                #end if
-                                            #end for
-                                            if positive :
-                                                # voxel coord is used for face
-                                                # in negative direction along that
-                                                # axis, add 1 for face in positive
-                                                # direction
-                                                for i in range(4) :
-                                                    coords[i][axis] += 1
-                                                #end for
-                                            #end if
-                                            if include_all_voxels :
-                                                for i in range(4) :
-                                                    coord = coords[i]
-                                                    for j in range(3) :
-                                                        coord[j] = \
-                                                          (
-                                                                    (coord[j] - voxel_midpt[j])
-                                                                *
-                                                                    voxel_shrink
-                                                            +
-                                                                voxel_midpt[j]
-                                                          )
-                                                    #end for
-                                                #end for
-                                            #end if
-                                            vox_faces.append(tuple(tuple(c) for c in coords))
-                                    #end for positive
-                                #end for axis
-                                if len(vox_faces) != 0 :
-                                    matindex = voxels[x, y, z]
-                                    # only define materials for referenced colours
-                                    # TODO: model.materials
-                                    if matindex not in materials :
-                                        mat_colour = model.palette[matindex - 1]
-                                        mat_name = "vox_%d_%02x%02x%02x%02x" % (matindex, mat_colour.r, mat_colour.g, mat_colour.b, mat_colour.a)
-                                        material = bpy.data.materials.new(mat_name)
-                                        material.diffuse_color = (mat_colour.r / 255, mat_colour.g / 255, mat_colour.b / 255)
-                                        if mat_colour.a < 255 :
-                                            material.use_transparency = True
-                                            material.transparency_method = "Z_TRANSPARENCY"
-                                            material.alpha = mat_colour.a / 255
-                                        #end if
-                                        materials[matindex] = mat_name
+                def all_vox_coords() :
+                    # iterate over bounding box covering all voxel coordinates.
+                    for x in range(corner_lo[0], corner_hi[0]) :
+                        for y in range(corner_lo[1], corner_hi[1]) :
+                            for z in range(corner_lo[2], corner_hi[2]) :
+                                yield (x, y, z)
+                            #end for
+                        #end for
+                    #end for
+                #end all_vox_coords
+                def all_neighbours(x, y, z) :
+                    # iterates over the coordinates of all neighbouring voxels,
+                    # also returning the axis and direction to that neighbour.
+                    for axis in range(3) : # x, y, z
+                        for positive in (False, True) : # direction along axis
+                            neighbour_step = (-1, +1)[positive]
+                            yield \
+                                (
+                                    (
+                                        x + neighbour_step * int(axis == 0),
+                                        y + neighbour_step * int(axis == 1),
+                                        z + neighbour_step * int(axis == 2)
+                                    ),
+                                    # neighbouring voxel in specified direction
+                                    # along specified axis
+                                    axis,
+                                    positive,
+                                )
+                        #end for
+                    #end for
+                #end all_neighbours
+                # assign shells to contiguous regions with same material
+                merge_shells = {}
+                for x, y, z in all_vox_coords() :
+                    my_colour = voxel_colours.get((x, y, z))
+                    if my_colour != None :
+                        my_shell = None
+                        fix_neighbours = set()
+                        for neighbour, axis, positive in all_neighbours(x, y, z) :
+                            if voxel_colours.get(neighbour) == my_colour :
+                                if neighbour in voxel_shells :
+                                    neighbour_shell = voxel_shells[neighbour]
+                                    if my_shell == None :
+                                        my_shell = neighbour_shell
+                                    elif my_shell != neighbour_shell :
+                                        merge_shells[neighbour_shell] = my_shell
+                                          # if it was already in merge_shells, then
+                                          # its entry would specify a merge either
+                                          # with my_shell or some other shell that
+                                          # would also be merged with my_shell, so
+                                          # either way overwriting existing entry
+                                          # should be fine
                                     #end if
-                                    if matindex not in obj_materials :
-                                        obj_materials.append(matindex)
-                                    #end if
+                                elif not positive :
+                                    # actually won't happen
+                                    fix_neighbours.add(neighbour)
                                 #end if
-                                for vox_face in vox_faces :
-                                    face = []
-                                    for vox_vert in vox_face :
-                                        if vox_vert not in vertindexes :
-                                            vertindexes[vox_vert] = len(verts)
-                                            verts.append(vox_vert)
-                                        #end if
-                                        vox_vert = vertindexes[vox_vert]
-                                        face.append(vox_vert)
-                                    #end for
-                                    faces.append((face, matindex))
+                            #end if
+                        #end for
+                        if my_shell == None :
+                            my_shell = nr_shells
+                            nr_shells += 1
+                        #end if
+                        voxel_shells[x, y, z] = my_shell
+                        for neighbour in fix_neighbours :
+                            voxel_shells[neighbour] = my_shell
+                        #end for
+                    #end if voxel exists
+                #end for x, y, z
+                if len(merge_shells) != 0 :
+                    for vox in all_vox_coords() :
+                        cur_shell = voxel_shells.get(vox)
+                        if cur_shell in merge_shells :
+                            voxel_shells[vox] = merge_shells[cur_shell]
+                        #end if
+                    #end for
+                #end if
+                # output faces in some predictable order
+                for x, y, z in all_vox_coords() :
+                    my_shell = voxel_shells.get((x, y, z))
+                    if my_shell != None : # voxel exists
+                        vox_faces = []
+                        # add faces only on outer sides
+                        for neighbour, axis, positive in all_neighbours(x, y, z) :
+                            if voxel_shells.get(neighbour) != my_shell :
+                                # compute verts of voxel face in that
+                                # direction along that axis
+                                coords = [[x, y, z] for i in range(4)]
+                                other_axes = \
+                                    ( # axes in plane of face, ordered in specified direction
+                                        (axis + 2 - int(positive)) % 3,
+                                        (axis + 1 + int(positive)) % 3
+                                    )
+                                for i, step in enumerate((0, 1, 3, 2)) :
+                                    # generate vertex points in correct order
+                                    # to orient normal
+                                    if step & 1 != 0 :
+                                        coords[i][other_axes[0]] += 1
+                                    #end if
+                                    if step & 2 != 0 :
+                                        coords[i][other_axes[1]] += 1
+                                    #end if
                                 #end for
-                            #end if (x, y, z) in voxels
-                        #end for z
-                    #end for y
-                #end for x
+                                if positive :
+                                    # voxel coord is used for face
+                                    # in negative direction along that
+                                    # axis, add 1 for face in positive
+                                    # direction
+                                    for i in range(4) :
+                                        coords[i][axis] += 1
+                                    #end for
+                                #end if
+                                vox_faces.append(tuple(tuple(c) for c in coords))
+                            #end if
+                        #end for neighbour
+                        if len(vox_faces) != 0 :
+                            matindex = voxel_colours[x, y, z]
+                            # only define materials for referenced colours
+                            # TODO: model.materials
+                            if matindex not in materials :
+                                mat_colour = model.palette[matindex - 1]
+                                mat_name = "vox_%d_%02x%02x%02x%02x" % (matindex, mat_colour.r, mat_colour.g, mat_colour.b, mat_colour.a)
+                                material = bpy.data.materials.new(mat_name)
+                                material.diffuse_color = (mat_colour.r / 255, mat_colour.g / 255, mat_colour.b / 255)
+                                if mat_colour.a < 255 :
+                                    material.use_transparency = True
+                                    material.transparency_method = "Z_TRANSPARENCY"
+                                    material.alpha = mat_colour.a / 255
+                                #end if
+                                materials[matindex] = mat_name
+                            #end if
+                            if matindex not in obj_materials :
+                                obj_materials.append(matindex)
+                            #end if
+                        #end if
+                        for vox_face in vox_faces :
+                            face = []
+                            for vox_vert in vox_face :
+                                vox_key = vox_vert + (my_shell,)
+                                if vox_key not in vertindexes :
+                                    vertindexes[vox_key] = len(verts)
+                                    verts.append(vox_vert)
+                                #end if
+                                face.append(vertindexes[vox_key])
+                            #end for
+                            faces.append((face, matindex))
+                        #end for
+                    #end if voxel exists
+                #end for x, y, z
                 vox_name = "vox_%03d" % (objindex + 1)
                 vox_mesh = bpy.data.meshes.new(vox_name)
                 vox_mesh.from_pydata(verts, [], [f[0] for f in faces])
