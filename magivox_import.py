@@ -568,6 +568,8 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
                                 material_alpha = mat_colour.a / 255
                                 material = bpy.data.materials.new(mat_name)
                                 material.diffuse_color = material_colour
+                                material.use_transparent_shadows = True
+                                  # needed if any nonopaque materials present
                                 if material_alpha < 1.0 :
                                     material.use_transparency = True
                                     material.transparency_method = "Z_TRANSPARENCY"
