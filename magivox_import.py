@@ -20,8 +20,8 @@ bl_info = \
     {
         "name" : "Magivox Import",
         "author" : "Lawrence D'Oliveiro <ldo@geek-central.gen.nz>",
-        "version" : (0, 5, 0),
-        "blender" : (2, 7, 9),
+        "version" : (0, 5, 1),
+        "blender" : (2, 92, 0),
         "location" : "File > Import > MagicaVoxel",
         "description" :
             "imports files in MagicaVoxel format",
@@ -366,14 +366,14 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
     bl_idname = "import_mesh.magivox"
     bl_label = "Magivox Import"
 
-    files = CollectionProperty \
+    files : CollectionProperty \
       (
         name = "File Path",
         description = "Vox file to load",
         type = bpy.types.OperatorFileListElement
       )
     filename_ext = ".vox"
-    filter_glob = StringProperty(default = "*.vox", options = {"HIDDEN"})
+    filter_glob : StringProperty(default = "*.vox", options = {"HIDDEN"})
 
     def execute(self, context) :
         try :
@@ -567,13 +567,11 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
                                 material_colour = (mat_colour.r / 255, mat_colour.g / 255, mat_colour.b / 255)
                                 material_alpha = mat_colour.a / 255
                                 material = bpy.data.materials.new(mat_name)
-                                material.diffuse_color = material_colour
-                                material.use_transparent_shadows = True
+                                material.diffuse_color = material_colour + (material_alpha,)
+                                material.shadow_method = "HASHED"
                                   # needed if any nonopaque materials present
                                 if material_alpha < 1.0 :
-                                    material.use_transparency = True
-                                    material.transparency_method = "Z_TRANSPARENCY"
-                                    material.alpha = material_alpha
+                                    material.blend_method = "BLEND"
                                 #end if
                                 if common_group != None :
                                     material.use_nodes = True
@@ -630,9 +628,8 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
                 vox_mesh.from_pydata(verts, [], [f[0] for f in faces])
                 vox_mesh.update()
                 vox_obj = bpy.data.objects.new(vox_name, vox_mesh)
-                context.scene.objects.link(vox_obj)
-                bpy.ops.object.select_all(action = "DESELECT")
-                vox_obj.select = True
+                context.scene.collection.objects.link(vox_obj)
+                bpy.data.objects[vox_obj.name].select_set(True)
                 vox_materials = []
                 for matindex in obj_materials :
                     vox_materials.append(matindex)
@@ -660,14 +657,23 @@ def add_invoke_item(self, context) :
     self.layout.operator(MagivoxImport.bl_idname, text = "MagicaVoxel")
 #end add_invoke_item
 
+_classes_ = \
+    (
+        MagivoxImport,
+    )
+
 def register() :
-    bpy.utils.register_module(__name__)
-    bpy.types.INFO_MT_file_import.append(add_invoke_item)
+    for ċlass in _classes_ :
+        bpy.utils.register_class(ċlass)
+    #end for
+    bpy.types.TOPBAR_MT_file_import.append(add_invoke_item)
 #end register
 
 def unregister() :
-    bpy.utils.unregister_module(__name__)
-    bpy.types.INFO_MT_file_import.remove(add_invoke_item)
+    bpy.types.TOPBAR_MT_file_import.remove(add_invoke_item)
+    for ċlass in _classes_ :
+        bpy.utils.unregister_class(ċlass)
+    #end for
 #end unregister
 
 if __name__ == "__main__" :
