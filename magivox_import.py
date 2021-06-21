@@ -20,8 +20,8 @@ bl_info = \
     {
         "name" : "Magivox Import",
         "author" : "Lawrence D'Oliveiro <ldo@geek-central.gen.nz>",
-        "version" : (0, 5, 1),
-        "blender" : (2, 92, 0),
+        "version" : (0, 5, 2),
+        "blender" : (2, 93, 0),
         "location" : "File > Import > MagicaVoxel",
         "description" :
             "imports files in MagicaVoxel format",
@@ -386,40 +386,36 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
             f.close()
             model = VoxModel(main)
             sys.stderr.write("got model %s\n" % repr(model)) # debug
-            if context.scene.render.engine == "CYCLES" :
-                common_group_name = "vox material common"
-                if common_group_name in bpy.data.node_groups :
-                    common_group = bpy.data.node_groups[common_group_name]
-                else :
-                    common_group = bpy.data.node_groups.new(common_group_name, "ShaderNodeTree")
-                    group_inputs = common_group.nodes.new("NodeGroupInput")
-                    group_inputs.location = (-400, 0)
-                    common_group.inputs.new("NodeSocketColor", "Colour")
-                    common_group.inputs.new("NodeSocketFloatFactor", "Alpha")
-                    reroute = common_group.nodes.new("NodeReroute")
-                    reroute.location = (-200, -150)
-                    common_group.links.new(group_inputs.outputs[0], reroute.inputs[0])
-                    transparent_shader = common_group.nodes.new("ShaderNodeBsdfTransparent")
-                    transparent_shader.location = (-100, -0)
-                    common_group.links.new(reroute.outputs[0], transparent_shader.inputs[0])
-                    diffuse_shader = common_group.nodes.new("ShaderNodeBsdfDiffuse")
-                    diffuse_shader.location = (-100, -150)
-                    common_group.links.new(reroute.outputs[0], diffuse_shader.inputs[0])
-                    mix_shader = common_group.nodes.new("ShaderNodeMixShader")
-                    mix_shader.location = (150, -75)
-                    common_group.links.new(group_inputs.outputs[1], mix_shader.inputs[0])
-                    common_group.links.new(transparent_shader.outputs[0], mix_shader.inputs[1])
-                    common_group.links.new(diffuse_shader.outputs[0], mix_shader.inputs[2])
-                    # group will contain material output directly
-                    material_output = common_group.nodes.new("ShaderNodeOutputMaterial")
-                    material_output.location = (400, 0)
-                    common_group.links.new(mix_shader.outputs[0], material_output.inputs[0])
-                    for node in common_group.nodes :
-                        node.select = False
-                    #end for
-                #end if
+            common_group_name = "vox material common"
+            if common_group_name in bpy.data.node_groups :
+                common_group = bpy.data.node_groups[common_group_name]
             else :
-                common_group = None
+                common_group = bpy.data.node_groups.new(common_group_name, "ShaderNodeTree")
+                group_inputs = common_group.nodes.new("NodeGroupInput")
+                group_inputs.location = (-400, 0)
+                common_group.inputs.new("NodeSocketColor", "Colour")
+                common_group.inputs.new("NodeSocketFloatFactor", "Alpha")
+                reroute = common_group.nodes.new("NodeReroute")
+                reroute.location = (-200, -150)
+                common_group.links.new(group_inputs.outputs[0], reroute.inputs[0])
+                transparent_shader = common_group.nodes.new("ShaderNodeBsdfTransparent")
+                transparent_shader.location = (-100, -0)
+                common_group.links.new(reroute.outputs[0], transparent_shader.inputs[0])
+                diffuse_shader = common_group.nodes.new("ShaderNodeBsdfDiffuse")
+                diffuse_shader.location = (-100, -150)
+                common_group.links.new(reroute.outputs[0], diffuse_shader.inputs[0])
+                mix_shader = common_group.nodes.new("ShaderNodeMixShader")
+                mix_shader.location = (150, -75)
+                common_group.links.new(group_inputs.outputs[1], mix_shader.inputs[0])
+                common_group.links.new(transparent_shader.outputs[0], mix_shader.inputs[1])
+                common_group.links.new(diffuse_shader.outputs[0], mix_shader.inputs[2])
+                # group will contain material output directly
+                material_output = common_group.nodes.new("ShaderNodeOutputMaterial")
+                material_output.location = (400, 0)
+                common_group.links.new(mix_shader.outputs[0], material_output.inputs[0])
+                for node in common_group.nodes :
+                    node.select = False
+                #end for
             #end if
             materials = {}
             for objindex, (obj_dims, obj) in enumerate(model.models) :
@@ -573,36 +569,34 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
                                 if material_alpha < 1.0 :
                                     material.blend_method = "BLEND"
                                 #end if
-                                if common_group != None :
-                                    material.use_nodes = True
-                                    material_tree = material.node_tree
-                                    for node in list(material_tree.nodes) :
-                                      # clear out default nodes
-                                        material_tree.nodes.remove(node)
-                                    #end for
-                                    group_node = material_tree.nodes.new("ShaderNodeGroup")
-                                    group_node.node_tree = common_group
-                                    group_node.location = (0, 0)
-                                    in_colour = material_tree.nodes.new("ShaderNodeRGB")
-                                    in_colour.location = (-300, 100)
-                                    in_colour.outputs[0].default_value = material_colour + (1,)
-                                    in_alpha = material_tree.nodes.new("ShaderNodeValue")
-                                    in_alpha.location = (-300, -150)
-                                    in_alpha.outputs[0].default_value = material_alpha
-                                    material_tree.links.new \
-                                      (
-                                        in_colour.outputs[0],
-                                        group_node.inputs[0]
-                                      )
-                                    material_tree.links.new \
-                                      (
-                                        in_alpha.outputs[0],
-                                        group_node.inputs[1]
-                                      )
-                                    for node in material_tree.nodes :
-                                        node.select = False
-                                    #end for
-                                #end if
+                                material.use_nodes = True
+                                material_tree = material.node_tree
+                                for node in list(material_tree.nodes) :
+                                  # clear out default nodes
+                                    material_tree.nodes.remove(node)
+                                #end for
+                                group_node = material_tree.nodes.new("ShaderNodeGroup")
+                                group_node.node_tree = common_group
+                                group_node.location = (0, 0)
+                                in_colour = material_tree.nodes.new("ShaderNodeRGB")
+                                in_colour.location = (-300, 100)
+                                in_colour.outputs[0].default_value = material_colour + (1,)
+                                in_alpha = material_tree.nodes.new("ShaderNodeValue")
+                                in_alpha.location = (-300, -150)
+                                in_alpha.outputs[0].default_value = material_alpha
+                                material_tree.links.new \
+                                  (
+                                    in_colour.outputs[0],
+                                    group_node.inputs[0]
+                                  )
+                                material_tree.links.new \
+                                  (
+                                    in_alpha.outputs[0],
+                                    group_node.inputs[1]
+                                  )
+                                for node in material_tree.nodes :
+                                    node.select = False
+                                #end for
                                 materials[matindex] = mat_name
                             #end if
                             if matindex not in obj_materials :
