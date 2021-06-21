@@ -1,0 +1,184 @@
+#!/usr/bin/python3
+#+
+# Quick-and-dirty script for converting a .vox file to JSON
+# representatin, for debugging. Reads the .vox file from standard
+# input, and writes the JSON representation to standard output.
+#-
+
+import sys
+import io
+import struct
+import json
+import getopt
+
+#+
+# Useful stuff
+#-
+
+def structread(fromfile, decode_struct) :
+    "reads sufficient bytes from fromfile to be unpacked according to" \
+    " decode_struct, and returns the unpacked results."
+    return struct.unpack(decode_struct, fromfile.read(struct.calcsize(decode_struct)))
+#end structread
+
+class Failure(Exception) :
+
+    def __init__(self, msg) :
+        self.msg = msg
+    #end __init__
+
+#end Failure
+
+class IndentedOut :
+
+    indent_step = 4
+
+    def __init__(self, out) :
+        self.out = out
+        self.indent = 0
+        self.startofline = True
+    #end __init__
+
+    def write(self, data) :
+        for ch in data :
+            if self.startofline and ch != "\n" :
+                self.out.write(" " * self.indent)
+            #end if
+            self.out.write(ch)
+            self.startofline = ch == "\n"
+        #end for
+    #end write
+
+    def push_indent(self) :
+        self.indent += self.indent_step
+    #end push_indent
+
+    def pop_indent(self) :
+        self.indent -= self.indent_step
+    #end pop_indent
+
+#end IndentedOut
+
+#+
+# Format decoding
+#
+# (subset of definitions from magivox_import.py)
+#-
+
+class Chunk :
+
+    __slots__ = ("id", "content", "children")
+
+    def __init__(self, id, content, children) :
+        self.id = id
+        self.content = content
+        self.children = children
+    #end __init__
+
+    @classmethod
+    def decode_children(celf, block) :
+        children = []
+        while True :
+            if len(block) == 0 :
+                break
+            if len(block) < 12 :
+                raise Failure("child chunk header too short")
+            #end if
+            id, content_len, grandchildren_len = struct.unpack("<4sII", block[:12])
+            block = block[12:]
+            if content_len + grandchildren_len > len(block) :
+                raise Failure("child content too short")
+            #end if
+            content = block[:content_len]
+            block = block[content_len:]
+            grandchildren_block = block[:grandchildren_len]
+            block = block[grandchildren_len:]
+            grandchildren = celf.decode_children(grandchildren_block)
+            children.append(celf(id, content, grandchildren))
+        #end while
+        return \
+            children
+    #end decode_children
+
+    @classmethod
+    def load(celf, fromfile) :
+        id, content_len, children_len = structread(fromfile, "<4sII")
+        content = fromfile.read(content_len)
+        children_block = fromfile.read(children_len)
+        if len(content) < content_len or len(children_block) < children_len :
+            raise Failure("input file too short")
+        #end if
+        return \
+            celf(id, content, celf.decode_children(children_block))
+    #end load
+
+#end Chunk
+
+def dump(chunk, out) :
+    out.write("{\"id\" : %s,\n" % json.dumps(chunk.id.decode()))
+    out.push_indent()
+    out.write("\"content\" :")
+    pack_type = {b"SIZE" : "I"}.get(chunk.id, "B") # good enough for now
+    eltsize = struct.calcsize(pack_type)
+    if len(chunk.content) % eltsize != 0 :
+        raise Failure("length of %s chunk is not exact multiple of %d" % (chunk.id, eltsize))
+    #end if
+    if chunk.id == b"XYZI" :
+        content = struct.unpack("<I%dB" % ((len(chunk.content) - 4) // eltsize), chunk.content)
+        nr_voxels = content[0]
+        content = content[1:]
+        out.write("\n")
+        out.push_indent()
+        out.write("[\n")
+        assert len(content) % 4 == 0, "XYZI must be multiple of 4"
+        assert nr_voxels == len(content) // 4, \
+            "disagreement in nr voxels: %d vs %d" % (nr_voxels, len(content) // 4)
+        out.push_indent()
+        for i in range(1, nr_voxels + 1) :
+            coords = content[(i - 1) * 4 : i * 4]
+            out.write("[%d, %d, %d, %d]" % coords)
+            if i < nr_voxels :
+                out.write(",")
+            #end if
+            out.write("\n")
+        #end for
+        out.pop_indent()
+        out.write("]")
+        out.pop_indent()
+    else :
+        content = struct.unpack("<%d%s" % (len(chunk.content) // eltsize, pack_type), chunk.content)
+        out.write(" ")
+        out.write(json.dumps(content))
+    #end if
+    out.write(",\n\"children\" :\n")
+    out.push_indent()
+    out.write("[\n")
+    for i, child in enumerate(chunk.children, 1) :
+        out.push_indent()
+        dump(child, out)
+        if i < len(chunk.children) :
+            out.write(",")
+        #end if
+        out.write("\n")
+        out.pop_indent()
+    #end for
+    out.write("]\n")
+    out.pop_indent()
+    out.pop_indent()
+    out.write("}")
+#end dump
+
+#+
+# Mainline
+#-
+
+ın = sys.stdin.buffer
+sig, ver = structread(ın, "<4sI")
+if sig != b"VOX " or ver != 150 :
+    raise Failure("incorrect file header")
+#end if
+main = Chunk.load(ın)
+out = IndentedOut(sys.stdout)
+dump(main, out)
+out.write("\n")
+out.flush()
