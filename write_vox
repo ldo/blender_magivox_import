@@ -109,7 +109,7 @@ class Chunk :
 #end Chunk
 
 jmain = json.load(sys.stdin.buffer)
-sys.stdout.write("loaded %s\n" % repr(jmain))
+sys.stderr.write("loaded %s\n" % repr(jmain))
 main = Chunk.from_json(jmain, expect_id = "MAIN")
 sys.stderr.write("decoded %s\n" % repr(main))
 out = sys.stdout.buffer
