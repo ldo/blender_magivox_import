@@ -151,12 +151,12 @@ def disc(m, c, *, radius) :
 #end disc
 
 def cylinder(m, c, *, length, radius, thickness) :
-    angle_steps = math.ceil(2 * math.pi * radius * math.sqrt(2))
+    angle_steps = math.ceil(2 * math.pi * (radius + thickness / 2))
       # worst case
-    for z in range(math.floor(- length / 2), math.ceil(length / 2)) :
+    for z in range(math.floor(- length / 2), math.floor(length / 2)) :
         for i in range(angle_steps) :
             angle = 2 * math.pi * i / angle_steps
-            for r in range(math.floor(radius - thickness / 2), math.ceil(radius + thickness / 2)) :
+            for r in range(math.floor(radius - thickness / 2), math.floor(radius + thickness / 2)) :
                 x = round(math.cos(angle) * r)
                 y = round(math.sin(angle) * r)
                 if m.get_voxel(x, y, z) == None :
