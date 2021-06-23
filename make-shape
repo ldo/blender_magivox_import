@@ -1,0 +1,291 @@
+#!/usr/bin/python3
+#+
+# Script to generate simple MagicaVoxel test shapes. Actually
+# this creates JSON format; use the accompanying jvox_to_vox
+# script to produce the proper file format.
+#
+# Note the generated models consist of only a single colour for now.
+# This is good for debugging the voxel-merging algorithm in the
+# importer.
+#
+# Copyright 2021 by Lawrence D'Oliveiro <ldo@geek-central.gen.nz>.
+# Licensed under CC-BY-SA <http://creativecommons.org/licenses/by-sa/4.0/>.
+#-
+
+import sys
+import math
+import json
+import getopt
+
+class Model :
+    "for convenient construction of a model by specifying individual" \
+    " voxel coordinates and associated colour indices. For convenience," \
+    " coordinates may be given as signed integers, with automatic normalization" \
+    " to non-negative values afterwards."
+
+    __slots__ = \
+        (
+            "min_x", "max_x",
+            "min_y", "max_y",
+            "min_z", "max_z",
+            "voxels",
+        )
+
+    def __init__(self) :
+        self.min_x = self.max_x = self.min_y = self.max_y = self.min_z = self.max_z = 0
+        self.voxels = {}
+    #end __init__
+
+    def add_voxel(self, x, y, z, c) :
+        "adds a voxel at the specified location with the given colour index."
+        if not (all(isinstance(i, int) for i in (x, y, z, c)) and 0 < c < 256) :
+            raise ValueError \
+              (
+                "voxel coords must be non-negative integers and colour index must be in 1..255"
+              )
+        #end if
+        if any(a - b > 255 for a, b in zip((self.min_x, self.min_y, self.min_z), (x, y, z))) :
+            raise ValueError("voxel coords exceed permitted range")
+        #end if
+        if (x, y, z) in self.voxels :
+            raise ValueError("duplicate voxel at (%d, %d, %d)" % (x, y, z))
+        #end if
+        for minattr, maxattr, val in \
+            (
+                ("min_x", "max_x", x),
+                ("min_y", "max_y", y),
+                ("min_z", "max_z", z),
+            ) \
+        :
+            setattr(self, minattr, min(getattr(self, minattr), val))
+            setattr(self, maxattr, max(getattr(self, maxattr), val + 1))
+        #end for
+        self.voxels[x, y, z] = c
+    #end add_voxel
+
+    def get_voxel(self, x, y, z) :
+        return self.voxels.get((x, y, z))
+    #end get_voxel
+
+    def iter_voxels(self, normalize) :
+        "generator which returns defined voxel coordinates and corresponding colour indices."
+        if normalize :
+            adj_x, adj_y, adj_z = - self.min_x, - self.min_y, - self.min_z
+        else :
+            adj_x, adj_y, adj_z = 0, 0, 0
+        #end if
+        for x in range(self.min_x, self.max_x) :
+            for y in range(self.min_y, self.max_y) :
+                for z in range(self.min_z, self.max_z) :
+                    c = self.voxels.get((x, y, z))
+                    if c != None :
+                        yield (x + adj_x, y + adj_y, z + adj_z, c)
+                    #end if
+                #end for
+            #end for
+        #end for
+    #end iter_voxels
+
+    def to_jvox(self, normalize = True) :
+        "returns the JSON representation of the Model."
+        result = \
+            {
+                "id" : "MAIN",
+                "content" : [],
+                "children" :
+                    [
+                        {
+                            "id" : "SIZE",
+                            "content" :
+                                [
+                                    self.max_x - self.min_x,
+                                    self.max_y - self.min_y,
+                                    self.max_z - self.min_z,
+                                ],
+                            "children" : [],
+                        },
+                        {
+                            "id" : "XYZI",
+                            "content" : list(self.iter_voxels(normalize)),
+                            "children" : [],
+                        },
+                    ],
+            }
+        return json.dumps(result)
+    #end to_jvox
+
+    def __repr__(self) :
+        return self.to_jvox(False)
+    #end __repr__
+
+#end Model
+
+#+
+# Various test shapes
+#-
+
+def cuboid(m, c, *, length, width, height) :
+    for x in range(width) :
+        for y in range(length) :
+            for z in range(height) :
+                m.add_voxel(x, y, z, c)
+            #end for
+        #end for
+    #end for
+#end cuboid
+
+def disc(m, c, *, radius) :
+    angle_steps = math.ceil(2 * math.pi * radius)
+      # worst case
+    z = 0
+    for i in range(angle_steps) :
+        angle = 2 * math.pi * i / angle_steps
+        for r in range(0, math.ceil(radius)) :
+            x = round(math.cos(angle) * r)
+            y = round(math.sin(angle) * r)
+            if m.get_voxel(x, y, z) == None :
+                m.add_voxel(x, y, z, c)
+            #end if
+        #end for
+    #end for
+#end disc
+
+def cylinder(m, c, *, length, radius, thickness) :
+    angle_steps = math.ceil(2 * math.pi * radius * math.sqrt(2))
+      # worst case
+    for z in range(math.floor(- length / 2), math.ceil(length / 2)) :
+        for i in range(angle_steps) :
+            angle = 2 * math.pi * i / angle_steps
+            for r in range(math.floor(radius - thickness / 2), math.ceil(radius + thickness / 2)) :
+                x = round(math.cos(angle) * r)
+                y = round(math.sin(angle) * r)
+                if m.get_voxel(x, y, z) == None :
+                    m.add_voxel(x, y, z, c)
+                #end if
+            #end for
+        #end for
+    #end for
+#end cylinder
+
+def radiant(m, c, *, radius, thickness) :
+    thicken = range(math.floor(- thickness / 2), math.floor(thickness / 2))
+    length = range(math.ceil(- radius - 0.5), math.floor(radius + 1.5))
+    revlength = range(math.floor(radius + 0.5), math.ceil(- radius - 1.5), -1)
+    fixed = [0] * (2 * radius + 1)
+    for ranges in \
+        (
+            (length, fixed, fixed),
+            (fixed, length, fixed),
+            (fixed, fixed, length),
+            (length, length, fixed),
+            (length, revlength, fixed),
+            (length, fixed, length),
+            (length, fixed, revlength),
+            (fixed, length, length),
+            (fixed, length, revlength),
+            (length, length, length),
+            (length, length, revlength),
+            (length, revlength, length),
+            (revlength, length, length),
+        ) \
+    :
+        sys.stderr.write("range: %s\n" % repr(list(list(r) for r in ranges))) # debug
+        for x0, y0, z0 in zip(*ranges) :
+            for dx in thicken :
+                for dy in thicken :
+                    for dz in thicken :
+                        x = x0 + dx
+                        y = y0 + dy
+                        z = z0 + dz
+                        if m.get_voxel(x, y, z) == None :
+                            m.add_voxel(x, y, z, c)
+                        #end if
+                    #end for
+                #end for
+            #end for
+        #end for
+    #end for
+#end radiant
+
+def pos_int(x) :
+    x = int(x)
+    if x <= 0 :
+        raise ValueError("must be positive")
+    #end if
+    return x
+#end pos_int
+
+avail_models = \
+    {
+        "cuboid" :
+            {
+                "args" : (("length", pos_int), ("width", pos_int), ("height", pos_int)),
+                "action" : cuboid,
+            },
+        "cylinder" :
+            {
+                "args" : (("length", pos_int), ("radius", pos_int), ("thickness", pos_int)),
+                "action" : cylinder,
+            },
+        "disc" :
+            {
+                "args" : (("radius", pos_int),),
+                "action" : disc,
+            },
+        "radiant" :
+            {
+                "args" : (("radius", pos_int), ("thickness", pos_int)),
+                "action" : radiant,
+            },
+    }
+
+#+
+# Mainline
+#-
+
+opts, args = getopt.getopt \
+  (
+    sys.argv[1:],
+    "",
+    []
+  )
+if len(args) != 1 :
+    raise getopt.GetoptError("Usage: %s «shape»:«params...»" % sys.argv[0])
+#end if
+modelspec = args[0].split(":")
+if modelspec[0] not in avail_models :
+    raise getopt.GetoptError \
+      (
+            "model type “%s” not in %s"
+        %
+            (modelspec[0], ", ".join(sorted(avail_models.keys())))
+      )
+#end if
+modeltype = avail_models[modelspec[0]]
+argtypes = dict(modeltype["args"])
+modelparms = dict(v.split("=", 1) for v in modelspec[1:])
+leftover = set(modelparms.keys()) - set(argtypes.keys())
+if len(leftover) != 0 :
+    raise getopt.GetoptError \
+      (
+            "no such parms for %s model: %s"
+        %
+            (modelspec[0], ", ".join(sorted(leftover)))
+      )
+#end if
+leftover = set(argtypes.keys()) - set(modelparms.keys())
+if len(leftover) != 0 :
+    raise getopt.GetoptError \
+      (
+            "missing required parms for %s model: %s"
+        %
+            (modelspec[0], ", ".join(sorted(leftover)))
+      )
+#end if
+modelparms = dict((k, argtypes[k](modelparms[k])) for k in modelparms)
+model = Model()
+modeltype["action"](model, 1, **modelparms)
+
+sys.stdout.write(model.to_jvox())
+sys.stdout.write("\n")
+
