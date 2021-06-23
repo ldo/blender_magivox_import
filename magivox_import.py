@@ -2,6 +2,9 @@
 # Importer for reading MagicaVoxel files into Blender.
 # File format description is taken from
 # <https://github.com/ephtracy/voxel-model/blob/master/MagicaVoxel-file-format-vox.txt>
+#
+# Copyright 2021 by Lawrence D'Oliveiro <ldo@geek-central.gen.nz>.
+# Licensed under CC-BY-SA <http://creativecommons.org/licenses/by-sa/4.0/>.
 #-
 
 import sys

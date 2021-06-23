@@ -3,6 +3,9 @@
 # Quick-and-dirty script for converting a .vox file to JSON
 # representatin, for debugging. Reads the .vox file from standard
 # input, and writes the JSON representation to standard output.
+#
+# Copyright 2021 by Lawrence D'Oliveiro <ldo@geek-central.gen.nz>.
+# Licensed under CC-BY-SA <http://creativecommons.org/licenses/by-sa/4.0/>.
 #-
 
 import sys
