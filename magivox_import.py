@@ -23,7 +23,7 @@ bl_info = \
     {
         "name" : "Magivox Import",
         "author" : "Lawrence D'Oliveiro <ldo@geek-central.gen.nz>",
-        "version" : (0, 5, 2),
+        "version" : (0, 5, 3),
         "blender" : (2, 93, 0),
         "location" : "File > Import > MagicaVoxel",
         "description" :
@@ -557,11 +557,11 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
                             #end if
                         #end for neighbour
                         if len(vox_faces) != 0 :
-                            matindex = voxel_colours[x, y, z]
+                            matindex = voxel_colours[x, y, z] - 1
                             # only define materials for referenced colours
                             # TODO: model.materials
                             if matindex not in materials :
-                                mat_colour = model.palette[matindex - 1]
+                                mat_colour = model.palette[matindex + 1]
                                 mat_name = "vox_%d_%02x%02x%02x%02x" % (matindex, mat_colour.r, mat_colour.g, mat_colour.b, mat_colour.a)
                                 material_colour = (mat_colour.r / 255, mat_colour.g / 255, mat_colour.b / 255)
                                 material_alpha = mat_colour.a / 255
