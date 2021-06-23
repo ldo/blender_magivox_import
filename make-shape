@@ -189,7 +189,6 @@ def radiant(m, c, *, radius, thickness) :
             (revlength, length, length),
         ) \
     :
-        sys.stderr.write("range: %s\n" % repr(list(list(r) for r in ranges))) # debug
         for x0, y0, z0 in zip(*ranges) :
             for dx in thicken :
                 for dy in thicken :
