@@ -23,7 +23,7 @@ bl_info = \
     {
         "name" : "Magivox Import",
         "author" : "Lawrence D'Oliveiro <ldo@geek-central.gen.nz>",
-        "version" : (0, 5, 3),
+        "version" : (0, 5, 4),
         "blender" : (2, 93, 0),
         "location" : "File > Import > MagicaVoxel",
         "description" :
@@ -473,7 +473,7 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
                     #end for
                 #end all_neighbours
                 # assign shells to contiguous regions with same material
-                merge_shells = {}
+                merge_shells = set() # of pairs of assigned shell indices to be merged
                 for x, y, z in all_vox_coords() :
                     my_colour = voxel_colours.get((x, y, z))
                     if my_colour != None :
@@ -486,21 +486,19 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
                                     if my_shell == None :
                                         my_shell = neighbour_shell
                                     elif my_shell != neighbour_shell :
-                                        merge_shells[neighbour_shell] = my_shell
-                                          # if it was already in merge_shells, then
-                                          # its entry would specify a merge either
-                                          # with my_shell or some other shell that
-                                          # would also be merged with my_shell, so
-                                          # either way overwriting existing entry
-                                          # should be fine
+                                        merge_shells.add \
+                                          ((
+                                            min(my_shell, neighbour_shell),
+                                            max(my_shell, neighbour_shell)
+                                          ))
                                     #end if
-                                elif not positive :
-                                    # actually won't happen
+                                else :
                                     fix_neighbours.add(neighbour)
                                 #end if
                             #end if
                         #end for
                         if my_shell == None :
+                            # new shell just for me (to start with)
                             my_shell = nr_shells
                             nr_shells += 1
                         #end if
@@ -510,14 +508,14 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
                         #end for
                     #end if voxel exists
                 #end for x, y, z
-                if len(merge_shells) != 0 :
+                while len(merge_shells) != 0 :
+                    to_merge, merge_with = merge_shells.pop()
                     for vox in all_vox_coords() :
-                        cur_shell = voxel_shells.get(vox)
-                        if cur_shell in merge_shells :
-                            voxel_shells[vox] = merge_shells[cur_shell]
+                        if voxel_shells.get(vox) == to_merge :
+                            voxel_shells[vox] = merge_with
                         #end if
                     #end for
-                #end if
+                #end while
                 # output faces in some predictable order
                 for x, y, z in all_vox_coords() :
                     my_shell = voxel_shells.get((x, y, z))
