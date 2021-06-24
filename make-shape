@@ -124,14 +124,28 @@ class Model :
 # Various test shapes
 #-
 
-def cuboid(m, c, *, length, width, height) :
-    for x in range(width) :
-        for y in range(length) :
-            for z in range(height) :
-                m.add_voxel(x, y, z, c)
+def cuboid(m, c, *, length, width, height, hollow) :
+    if hollow :
+        for orient in range(3) :
+            for x in (range(width), (0, width - 1))[orient == 0] :
+                for y in (range(length), (0, length - 1))[orient == 1] :
+                    for z in (range(height), (0, height - 1))[orient == 2] :
+                        if m.get_voxel(x, y, z) == None :
+                            m.add_voxel(x, y, z, c)
+                        #end if
+                    #end for
+                #end for
             #end for
         #end for
-    #end for
+    else :
+        for x in range(width) :
+            for y in range(length) :
+                for z in range(height) :
+                    m.add_voxel(x, y, z, c)
+                #end for
+            #end for
+        #end for
+    #end if
 #end cuboid
 
 def disc(m, c, *, radius) :
@@ -218,7 +232,13 @@ avail_models = \
     {
         "cuboid" :
             {
-                "args" : (("length", pos_int), ("width", pos_int), ("height", pos_int)),
+                "args" :
+                    (
+                        ("length", pos_int),
+                        ("width", pos_int),
+                        ("height", pos_int),
+                        ("hollow", lambda s : bool(int(s))),
+                    ),
                 "action" : cuboid,
             },
         "cylinder" :
