@@ -23,7 +23,7 @@ bl_info = \
     {
         "name" : "Magivox Import",
         "author" : "Lawrence D'Oliveiro <ldo@geek-central.gen.nz>",
-        "version" : (0, 5, 4),
+        "version" : (0, 5, 5),
         "blender" : (2, 93, 0),
         "location" : "File > Import > MagicaVoxel",
         "description" :
@@ -51,6 +51,72 @@ class Failure(Exception) :
     #end __init__
 
 #end Failure
+
+class Equivalence :
+    "for defining equivalence classes among a collection of objects."
+
+    __slots__ = ("entries", "nr_distinct")
+
+    def __init__(self) :
+        self.entries = {}
+        self.nr_distinct = 0
+    #end __init__
+
+    def add_equiv(self, a, b) :
+        "adds an equivalence between a and b. This can cause merging" \
+        " of sets, if there are already existing equivalences defined" \
+        " for a or b."
+        existing_a = self.entries.get(a)
+        existing_b = self.entries.get(b)
+        if existing_a != None :
+            if existing_b != None :
+                if existing_a == existing_b :
+                    pass # already considered equivalent
+                else :
+                    # merge the two sets
+                    for c in existing_b :
+                        existing_a.add(c)
+                        self.entries[c] = existing_a
+                    #end for
+                    self.nr_distinct -= 1
+                #end if
+            else :
+                existing_a.add(b)
+                self.entries[b] = existing_a
+            #end if
+        else :
+            if existing_b != None :
+                existing_b.add(a)
+                self.entries[a] = existing_b
+            else :
+                # both are new
+                self.entries[a] = self.entries[b] = {a, b}
+                self.nr_distinct += 1
+            #end if
+        #end if
+    #end add_equiv
+
+    def get_equiv(self, a) :
+        return self.existing[a]
+    #end get_equiv
+
+    def all_equivs(self) :
+        "yields all the equivalence classes that have been defined."
+        done = set()
+        for entry in self.entries.values() :
+            key = frozenset(entry)
+            if key not in done :
+                done.add(key)
+                yield entry
+            #end if
+        #end for
+    #end all_equivs
+
+    def __len__(self) :
+        return self.nr_distinct
+    #end __len__
+
+#end Equivalence
 
 #+
 # Format decoding
@@ -473,7 +539,7 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
                     #end for
                 #end all_neighbours
                 # assign shells to contiguous regions with same material
-                merge_shells = set() # of pairs of assigned shell indices to be merged
+                merge_shells = Equivalence()
                 for x, y, z in all_vox_coords() :
                     my_colour = voxel_colours.get((x, y, z))
                     if my_colour != None :
@@ -486,11 +552,7 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
                                     if my_shell == None :
                                         my_shell = neighbour_shell
                                     elif my_shell != neighbour_shell :
-                                        merge_shells.add \
-                                          ((
-                                            min(my_shell, neighbour_shell),
-                                            max(my_shell, neighbour_shell)
-                                          ))
+                                        merge_shells.add_equiv(my_shell, neighbour_shell)
                                     #end if
                                 else :
                                     fix_neighbours.add(neighbour)
@@ -508,14 +570,24 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
                         #end for
                     #end if voxel exists
                 #end for x, y, z
-                while len(merge_shells) != 0 :
-                    to_merge, merge_with = merge_shells.pop()
+                sys.stderr.write \
+                  (
+                        "total shells = %d, merge[%d] = [%s]\n"
+                    %
+                        (
+                            nr_shells,
+                            len(merge_shells),
+                            ", ".join("[%d]%s" % (len(e), repr(e)) for e in merge_shells.all_equivs())
+                        )
+                  ) # debug
+                for merging in merge_shells.all_equivs() :
+                    merge_into = merging.pop()
                     for vox in all_vox_coords() :
-                        if voxel_shells.get(vox) == to_merge :
-                            voxel_shells[vox] = merge_with
+                        if voxel_shells.get(vox) in merging :
+                            voxel_shells[vox] = merge_into
                         #end if
                     #end for
-                #end while
+                #end for
                 # output faces in some predictable order
                 for x, y, z in all_vox_coords() :
                     my_shell = voxel_shells.get((x, y, z))
