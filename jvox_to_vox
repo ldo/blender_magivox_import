@@ -60,7 +60,7 @@ class Chunk :
     __slots__ = ("id", "content", "children")
 
     @classmethod
-    def from_json(celf, data, expect_id = None) :
+    def from_json(celf, data, expect_id = None, filter_voxels = None) :
         if not isinstance(data, dict) or "id" not in data :
             raise Failure("expecting json dict with id field")
         #end if
@@ -69,7 +69,14 @@ class Chunk :
             raise Failure("expecting id = %s, not %s" % (repr(expect_id), repr(id)))
         #end if
         pack_type = {"SIZE" : "I"}.get(id, "B") # good enough for now
-        content = pack_ints(data.get("content", ""), pack_type)
+        content = data.get("content", "")
+        if id == "XYZI" and filter_voxels != None :
+            if not all(isinstance(v, (list, tuple)) and len(v) == 4 for v in content) :
+                raise ValueError("filter assumes voxels are specified as sequence of 4-lists/tuples")
+            #end if
+            content = list(filter(lambda v : filter_voxels(*v), content))
+        #end if
+        content = pack_ints(content, pack_type)
         if id == "XYZI" :
             if len(content) % 4 != 0 :
                 raise Failure("XYZI chunk is not whole number of voxels")
@@ -81,7 +88,12 @@ class Chunk :
             raise Failure("expecting sequence of children")
         #end if
         return \
-            celf(id.encode(), content, [celf.from_json(c) for c in children])
+            celf \
+              (
+                id.encode(),
+                content,
+                [celf.from_json(c, filter_voxels = filter_voxels) for c in children]
+              )
     #end from_json
 
     def __init__(self, id, content, children) :
@@ -111,9 +123,29 @@ class Chunk :
 
 #end Chunk
 
+#+
+# Mainline
+#-
+
+filter_voxels = None
+opts, args = getopt.getopt \
+  (
+    sys.argv[1:],
+    "",
+    ["filter-voxels="]
+  )
+for keyword, value in opts :
+    if keyword == "--filter-voxels" :
+        filter_voxels = eval("lambda x, y, z, c : %s" % value)
+    #end if
+#end for
+if len(args) != 0 :
+    raise getopt.GetoptError("no args expected, I only read from stdin and write to stdout")
+#end if
+
 jmain = json.load(sys.stdin.buffer)
 sys.stderr.write("loaded %s\n" % repr(jmain))
-main = Chunk.from_json(jmain, expect_id = "MAIN")
+main = Chunk.from_json(jmain, expect_id = "MAIN", filter_voxels = filter_voxels)
 sys.stderr.write("decoded %s\n" % repr(main))
 out = sys.stdout.buffer
 out.write(b"VOX ")
