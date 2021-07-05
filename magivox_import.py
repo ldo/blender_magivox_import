@@ -580,18 +580,33 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
                             ", ".join("[%d]%s" % (len(e), repr(e)) for e in merge_shells.all_equivs())
                         )
                   ) # debug
+                unmerged = set(range(nr_shells))
+                reported = set()
                 for merging in merge_shells.all_equivs() :
+                    merging = set(merging) # take copy of set
                     merge_into = merging.pop()
+                    sys.stderr.write("merging %s into %d\n" % (repr(merging), merge_into))
                     for vox in all_vox_coords() :
-                        if voxel_shells.get(vox) in merging :
-                            voxel_shells[vox] = merge_into
+                        shell = voxel_shells.get(vox)
+                        if shell != None :
+                            if shell in merging :
+                                voxel_shells[vox] = merge_into
+                            elif shell not in reported :
+                                reported.add(shell)
+                                sys.stderr.write("not (yet) merging %d\n" % shell)
+                            #end if
                         #end if
                     #end for
                 #end for
                 # output faces in some predictable order
+                shells_seen = set()
                 for x, y, z in all_vox_coords() :
                     my_shell = voxel_shells.get((x, y, z))
                     if my_shell != None : # voxel exists
+                        if my_shell not in shells_seen :
+                            sys.stderr.write("shell remaining: %d\n" % my_shell)
+                            shells_seen.add(my_shell)
+                        #end if
                         vox_faces = []
                         # add faces only on outer sides
                         for neighbour, axis, positive in all_neighbours(x, y, z) :
