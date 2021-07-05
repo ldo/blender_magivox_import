@@ -598,6 +598,9 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
                         #end if
                     #end for
                 #end for
+                # Note that remaining shells can include interior ones for hollow
+                # shapes. Should there be an option for excluding these? They won’t
+                # be seen if the outer material is opaque.
                 # output faces in some predictable order
                 shells_seen = set()
                 for x, y, z in all_vox_coords() :
