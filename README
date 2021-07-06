@@ -1,0 +1,16 @@
+This is my attempt at an importer for bringing models in the
+MagicaVoxel <https://github.com/ephtracy/voxel-model> file format into
+Blender. It tries to construct minimal meshes, so adjacent voxel cubes
+that share a face are coalesced into bigger shapes without interior
+faces.
+
+The Blender addon is just the one file magivox_import.py -- the util
+subdirectory contains utility scripts used during testing. The
+make-shape script generates some relatively simple test shapes; it
+outputs a format I call “jvox”, which is a JSON representation of the
+contents of a .vox file. The other scripts, jvox_to_vox and
+vox_to_jvox, allow interconversions between this format and .vox
+format.
+
+Lawrence D'Oliveiro <ldo@geek-central.gen.nz>
+2021 July 6
