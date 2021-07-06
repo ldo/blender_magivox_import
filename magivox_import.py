@@ -601,7 +601,11 @@ class MagivoxImport(bpy.types.Operator, bpy_extras.io_utils.ImportHelper) :
                 # Note that remaining shells can include interior ones for hollow
                 # shapes. Should there be an option for excluding these? They won’t
                 # be seen if the outer material is opaque.
-                # output faces in some predictable order
+                # Also note that, because each vertex coordinate only appears once,
+                # you can have non-manifold meshes in the situation where two
+                # voxel cubes share only an edge or a vertex. Should I worry
+                # about this?
+                # Anyway, output faces in some predictable order.
                 shells_seen = set()
                 for x, y, z in all_vox_coords() :
                     my_shell = voxel_shells.get((x, y, z))
